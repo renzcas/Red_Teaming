@@ -1,85 +1,68 @@
 # planner_v3.py
 from dataclasses import dataclass
 from typing import List, Dict, Any
-import time
-from .attention_tensor import AttentionWeight
 
 
 @dataclass
 class CognitiveAction:
-    """A high-level reasoning step the agent can take."""
     name: str
     target: str
-    priority: float
-    reasons: List[str]
-    timestamp: float
+    metadata: Dict[str, Any]
 
 
 class PlannerV3:
     """
-    The Planner decides the next cognitive action based on:
-      - attention weights
-      - world model state
-      - memory traces
-      - internal goals
+    Mode-aware planner with fatigue-based suppression.
     """
 
-    def __init__(self):
-        self.goals: Dict[str, float] = {}  # goal_name -> weight
+    def suppress_actions_due_to_fatigue(self, actions, fatigue_state):
+        suppressed = []
 
-    # ---------------------------------------------------------
-    # Register a goal with a baseline weight
-    # ---------------------------------------------------------
-    def register_goal(self, name: str, weight: float = 1.0):
-        self.goals[name] = weight
+        for a in actions:
+            if fatigue_state.fatigue > 0.7:
+                if a.name in ["explore_concept", "investigate_signal", "challenge_assumption"]:
+                    continue
 
-    # ---------------------------------------------------------
-    # Compute cognitive actions from attention
-    # ---------------------------------------------------------
-    def propose_actions(
-        self,
-        attention: List[AttentionWeight]
-    ) -> List[CognitiveAction]:
+            if 0.5 < fatigue_state.fatigue <= 0.7:
+                if a.name == "explore_concept":
+                    continue
 
-        actions = []
-        now = time.time()
+            suppressed.append(a)
 
-        for att in attention:
-            # Example mapping: attention → cognitive action
-            actions.append(
-                CognitiveAction(
-                    name="investigate_signal",
-                    target=att.name,
-                    priority=att.weight,
-                    reasons=[f"high attention on {att.name}"],
-                    timestamp=now
-                )
-            )
+        return suppressed if suppressed else actions
 
-            actions.append(
-                CognitiveAction(
-                    name="challenge_assumption",
-                    target=att.name,
-                    priority=att.weight * 0.8,
-                    reasons=[f"potential weak assumption in {att.name}"],
-                    timestamp=now
-                )
-            )
+    def select_action(self, actions, mode_profile, fatigue_state):
+        if not actions:
+            return CognitiveAction("noop", "none", {})
 
-            actions.append(
-                CognitiveAction(
-                    name="generate_hypothesis",
-                    target=att.name,
-                    priority=att.weight * 0.6,
-                    reasons=[f"novel pattern in {att.name}"],
-                    timestamp=now
-                )
-            )
+        actions = self.suppress_actions_due_to_fatigue(actions, fatigue_state)
 
-        return actions
+        # Mode-aware selection
+        if mode_profile.name == "exploration":
+            for a in actions:
+                if a.name in ["explore_concept", "investigate_signal"]:
+                    return a
 
-    # ---------------------------------------------------------
-    # Select the best action
-    # ---------------------------------------------------------
-    def select_action(self, actions: List[CognitiveAction]) -> CognitiveAction:
-        return max(actions, key=lambda a: a.priority)
+        if mode_profile.name == "consolidation":
+            for a in actions:
+                if a.name == "challenge_assumption":
+                    return a
+
+        if mode_profile.name == "divergence":
+            for a in actions:
+                if a.name in ["explore_concept", "investigate_signal"]:
+                    return a
+
+        if mode_profile.name == "focused":
+            target = actions[0].target
+            for a in actions:
+                if a.target == target:
+                    return a
+
+        if mode_profile.name == "idle":
+            for a in actions:
+                if a.metadata.get("reason") in ["anomaly_detected", "attack_path_detected"]:
+                    return a
+            return CognitiveAction("noop", "none", {})
+
+        return actions[0]

@@ -35,19 +35,32 @@ class WorldModelIntegrator:
           - world model facts
           - hypotheses
           - contradictions
+          - anomalies
+          - attack paths
           - episodic memory
         """
 
+        # Investigation
         if effect.action.startswith("investigate_"):
             return self._integrate_investigation(effect)
 
+        # Challenge assumptions
         if effect.action.startswith("challenge_"):
             return self._integrate_challenge(effect)
 
+        # Hypothesis generation
         if effect.action == "generate_hypothesis":
             return self._integrate_hypothesis(effect)
 
-        # fallback
+        # Anomaly recorded
+        if effect.type == "anomaly_recorded":
+            return self._integrate_anomaly(effect)
+
+        # Attack path recorded
+        if effect.type == "attack_path_recorded":
+            return self._integrate_attack_path(effect)
+
+        # Fallback
         return IntegrationResult(
             status="ignored",
             details={"reason": "no integration rule"},
@@ -109,5 +122,39 @@ class WorldModelIntegrator:
         return IntegrationResult(
             status="hypothesis_integrated",
             details=hypothesis,
+            timestamp=time.time()
+        )
+
+    def _integrate_anomaly(self, effect: CognitiveEffect) -> IntegrationResult:
+        anomaly_name = effect.target
+        details = effect.details
+
+        self.world.add_anomaly(anomaly_name, details)
+
+        self.memory.store_event(
+            f"Anomaly recorded: {anomaly_name}",
+            details
+        )
+
+        return IntegrationResult(
+            status="anomaly_integrated",
+            details={"anomaly": anomaly_name, **details},
+            timestamp=time.time()
+        )
+
+    def _integrate_attack_path(self, effect: CognitiveEffect) -> IntegrationResult:
+        src = effect.details.get("source")
+        dst = effect.details.get("target")
+
+        self.world.add_attack_path(src, dst, technique="investigation")
+
+        self.memory.store_event(
+            f"Attack path recorded: {src} -> {dst}",
+            effect.details
+        )
+
+        return IntegrationResult(
+            status="attack_path_integrated",
+            details={"source": src, "target": dst},
             timestamp=time.time()
         )

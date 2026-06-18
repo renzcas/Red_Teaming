@@ -1,93 +1,109 @@
 # brain_loop.py
-import time
-
-from .order_parameter_engine import OrderParameterEngine, Signal
-from .attention_tensor import AttentionTensor
-from .planner_v3 import PlannerV3
-from .cognitive_reactor import CognitiveReactor
-from .world_model_integrator import WorldModelIntegrator
-from .master_operator import MasterOperator
-from .cognitive_modes import CognitiveModes
+from modules.analyzer_v3 import AnalyzerV3
+from modules.planner_v3 import PlannerV3
+from modules.cognitive_reactor import CognitiveReactor
+from modules.world_model_integrator import WorldModelIntegrator
+from modules.master_operator import MasterOperator
+from modules.cognitive_modes import CognitiveModes
+from modules.cognitive_fatigue import CognitiveFatigue
+from modules.meta_memory import MetaMemory
+from modules.cognitive_reward import CognitiveRewardSystem
+from modules.strategy_brain import StrategyBrain
+from modules.self_debugger import SelfDebugger
 
 
 class BrainLoop:
-    """
-    The full synthetic cognition loop.
-    This is the thalamocortical engine of the agent.
-    """
-
-    def __init__(self, world, memory):
-        self.world = world
-        self.memory = memory
-
-        # Cognitive organs
-        self.order_engine = OrderParameterEngine()
-        self.attention = AttentionTensor()
+    def __init__(self, world):
+        self.analyzer = AnalyzerV3()
         self.planner = PlannerV3()
-        self.reactor = CognitiveReactor(world, memory)
-        self.integrator = WorldModelIntegrator(world, memory)
+        self.reactor = CognitiveReactor(world)
+        self.integrator = WorldModelIntegrator(world)
         self.master = MasterOperator()
+
         self.modes = CognitiveModes()
+        self.current_mode = "idle"
 
-        self.current_mode = "default"
+        self.fatigue = CognitiveFatigue()
+        self.meta_memory = MetaMemory()
+        self.reward = CognitiveRewardSystem()
+        self.strategy = StrategyBrain()
+        self.debugger = SelfDebugger()
 
-    # ---------------------------------------------------------
-    # MAIN LOOP STEP
-    # ---------------------------------------------------------
-    def step(self, analyzer_output):
-        """
-        One full cognition cycle.
-        analyzer_output should be a list of signals from the Analyzer.
-        """
+        self.world = world
 
-        # 1. Convert analyzer output into signals
-        signals = [
-            Signal(name=item["name"], value=item["value"], metadata=item)
-            for item in analyzer_output
-        ]
+    def step(self, raw_inputs):
+        # 1. ANALYZE
+        analyzer_output = self.analyzer.analyze(raw_inputs)
 
-        # 2. Compute order parameters
-        ops = [self.order_engine.evaluate(sig) for sig in signals]
+        # 2. PLAN
+        mode_profile = self.modes.get(self.current_mode)
+        fatigue_state = self.fatigue.snapshot()
+        chosen = self.planner.select_action(
+            analyzer_output.actions,
+            mode_profile,
+            fatigue_state
+        )
 
-        # 3. Compute attention field
-        att = self.attention.update_from_order_parameters(ops)
-
-        # 4. Planner proposes and selects cognitive action
-        actions = self.planner.propose_actions(list(att.values()))
-        chosen = self.planner.select_action(actions)
-
-        # 5. Cognitive Reactor executes the action
+        # 3. REACT
         effect = self.reactor.execute(chosen)
 
-        # 6. Integrate the effect into the world model
+        # 4. INTEGRATE
         integration = self.integrator.integrate(effect)
+        integration.details["fatigue_state"] = fatigue_state
 
-        # 7. MasterOperator supervises the cycle
-        meta = self.master.supervise(chosen, effect, integration)
+        # 5. UPDATE FATIGUE
+        self.fatigue.update_from_effect(effect)
+        self.fatigue.update_from_mode(mode_profile)
+        self.fatigue.natural_decay()
+        fatigue_state = self.fatigue.snapshot()
 
-        # 8. Mode switching
+        # 6. META-MEMORY HOOKS
+        if "contradiction" in effect.type:
+            self.meta_memory.record(
+                mode=self.current_mode,
+                fatigue_state=fatigue_state,
+                event_type="contradiction",
+                details={"target": effect.target}
+            )
+
+        if fatigue_state.entropy > 0.8:
+            self.meta_memory.record(
+                mode=self.current_mode,
+                fatigue_state=fatigue_state,
+                event_type="entropy_spike",
+                details={"entropy": fatigue_state.entropy}
+            )
+
+        # 7. REWARD
+        reward_signal = self.reward.compute_reward(effect, fatigue_state, self.meta_memory)
+
+        # 8. STRATEGY
+        strategy = self.strategy.form_strategy(self.world, self.meta_memory, reward_signal)
+
+        # 9. SELF-DEBUGGING
+        debug_signal = self.debugger.analyze(self.meta_memory, fatigue_state)
+
+        # 10. MASTER OPERATOR
+        meta = self.master.supervise(
+            chosen,
+            effect,
+            integration,
+            self.meta_memory,
+            fatigue_state,
+            strategy,
+            debug_signal
+        )
+
+        # 11. MODE SWITCH
         if meta.action == "switch_mode":
             self.current_mode = meta.details["new_mode"]
 
-        # 9. Return full cognition trace
         return {
-            "mode": self.current_mode,
-            "chosen_action": chosen,
+            "chosen": chosen,
             "effect": effect,
             "integration": integration,
-            "meta": meta
+            "meta": meta,
+            "fatigue": fatigue_state,
+            "strategy": strategy,
+            "reward": reward_signal
         }
-
-    # ---------------------------------------------------------
-    # CONTINUOUS LOOP (optional)
-    # ---------------------------------------------------------
-    def run(self, analyzer, delay=0.1):
-        """
-        Run the cognition loop continuously.
-        analyzer must have a .analyze() method.
-        """
-
-        while True:
-            analyzer_output = analyzer.analyze()
-            trace = self.step(analyzer_output)
-            time.sleep(delay)
