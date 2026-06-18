@@ -1,0 +1,18 @@
+class AttackSurfaceMapper:
+    def map(self, subdomains, techstack, employees):
+        surface = {
+            "external_services": subdomains,
+            "tech_risks": [],
+            "identity_risks": []
+        }
+
+        if techstack.get("framework") == "django":
+            surface["tech_risks"].append("Check for debug mode exposure")
+
+        if techstack.get("database") == "mysql":
+            surface["tech_risks"].append("Check for default creds or open ports")
+
+        if employees:
+            surface["identity_risks"].append("Possible username patterns for brute-force simulation")
+
+        return surface

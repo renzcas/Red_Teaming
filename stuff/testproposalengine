@@ -1,0 +1,27 @@
+class ToolProposalEngine:
+    def propose(self, surface):
+        proposals = []
+
+        # External service probing
+        for sub in surface["external_services"]:
+            proposals.append({
+                "tool": "nmap",
+                "reason": f"Port scan {sub}",
+                "args": f"-sV -Pn {sub}"
+            })
+            proposals.append({
+                "tool": "whatweb",
+                "reason": f"Fingerprint web tech on {sub}",
+                "args": f"{sub}"
+            })
+
+        # Tech risks
+        for risk in surface["tech_risks"]:
+            if "django" in risk.lower():
+                proposals.append({
+                    "tool": "dirsearch",
+                    "reason": "Check common Django paths",
+                    "args": "-u <target> -e php,html,txt"
+                })
+
+        return proposals

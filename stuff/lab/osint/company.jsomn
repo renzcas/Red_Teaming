@@ -1,0 +1,7 @@
+{
+  "company": "Acme Labs",
+  "domain": "acme.local",
+  "subdomains": ["dev.acme.local", "vpn.acme.local"],
+  "employees": ["alice", "bob", "charlie"],
+  "tech": ["nginx", "django", "mysql"]
+}

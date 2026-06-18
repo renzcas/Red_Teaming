@@ -1,0 +1,10 @@
+class OperatorApproval:
+    def review(self, commands):
+        print("Proposed commands:")
+        for i, c in enumerate(commands):
+            print(f"[{i}] {c['command']}  # {c['reason']}")
+
+        approved = input("Enter indexes to approve (comma-separated): ")
+        approved = [int(x.strip()) for x in approved.split(",")]
+
+        return [commands[i] for i in approved]

@@ -1,0 +1,24 @@
+class RedOSINTAgent:
+    def __init__(self, profile):
+        self.profile = profile
+
+    def run(self):
+        # Step 1: Reasoning
+        subs = SubdomainInference().infer(self.profile["domain"])
+        tech = TechStackInference().infer(self.profile["tech"])
+        surface = AttackSurfaceMapper().map(subs, tech, self.profile["employees"])
+
+        # Step 2: Propose tools
+        proposals = ToolProposalEngine().propose(surface)
+
+        # Step 3: Generate commands
+        commands = CommandGenerator().generate(proposals)
+
+        # Step 4: Operator approval
+        approved = OperatorApproval().review(commands)
+
+        return {
+            "surface": surface,
+            "proposals": proposals,
+            "approved": approved
+        }

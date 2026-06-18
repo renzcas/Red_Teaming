@@ -1,0 +1,10 @@
+class CommandGenerator:
+    def generate(self, proposals):
+        commands = []
+        for p in proposals:
+            cmd = f"{p['tool']} {p['args']}"
+            commands.append({
+                "command": cmd,
+                "reason": p["reason"]
+            })
+        return commands

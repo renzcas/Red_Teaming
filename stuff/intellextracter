@@ -1,0 +1,16 @@
+class IntelExtractor:
+    def extract(self, parsed):
+        intel = {"risks": [], "opportunities": []}
+
+        if "open_ports" in parsed:
+            if "22/tcp" in parsed["open_ports"]:
+                intel["opportunities"].append("SSH username enumeration")
+            if "3306/tcp" in parsed["open_ports"]:
+                intel["risks"].append("MySQL exposed externally")
+
+        if "fingerprints" in parsed:
+            for fp in parsed["fingerprints"]:
+                if "Django" in fp:
+                    intel["risks"].append("Django framework detected")
+
+        return intel
